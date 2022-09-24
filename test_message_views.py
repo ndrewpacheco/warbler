@@ -52,7 +52,7 @@ class MessageViewTestCase(TestCase):
         db.session.commit()
 
     def test_add_message(self):
-        """Can use add a message?"""
+        """Can user add a message?"""
 
         # Since we need to change the session to mimic logging in,
         # we need to use the changing-session trick:
@@ -71,3 +71,83 @@ class MessageViewTestCase(TestCase):
 
             msg = Message.query.one()
             self.assertEqual(msg.text, "Hello")
+
+    def test_delete_message(self):
+        """Can user delete a message?"""
+
+        # Since we need to change the session to mimic logging in,
+        # we need to use the changing-session trick:
+        
+        with self.client as c:
+            with c.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+                # Now, that session setting is saved, so we can have
+                # the rest of ours test
+
+            # post new msg
+            c.post("/messages/new", data={"text": "Hello"})
+        
+            msg = Message.query.one()
+            user = User.query.get(self.testuser.id)
+                
+            # test for new message
+            self.assertIn(msg, user.messages)
+
+            # delete msg
+            resp = c.post(f"/messages/{msg.id}/delete")
+            user = User.query.get(self.testuser.id)
+
+            # test for deleted message
+            self.assertNotIn(msg, user.messages)
+
+    def test_logged_out_add_msg(self):
+        "Are you prohibited from adding a msg when logged out"
+
+        # Since we need to change the session to mimic logging in,
+        # we need to use the changing-session trick:
+        
+        with self.client as c:
+            with c.session_transaction() as sess:
+                # login
+                sess[CURR_USER_KEY] = self.testuser.id
+
+                # then logout
+                del sess[CURR_USER_KEY]
+
+        # attempt to add a msg
+        resp = c.post("/messages/new", data={"text": "Hello"}, follow_redirects=True)
+        html = resp.get_data(as_text=True)
+
+        # should go to home-anon.html view
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('<h4>New to Warbler?</h4>', html)
+
+    def test_logged_out_delete_msg(self):
+        "Are you prohibited from deleting a msg when logged out"
+        
+
+        "Are you prohibited from adding a msg when logged out"
+
+        # Since we need to change the session to mimic logging in,
+        # we need to use the changing-session trick:
+        
+        with self.client as c:
+            with c.session_transaction() as sess:
+                # login
+                sess[CURR_USER_KEY] = self.testuser.id
+            
+            # add new msg
+            c.post("/messages/new", data={"text": "Hello"})
+
+            # then logout
+            with c.session_transaction() as sess:
+                del sess[CURR_USER_KEY]
+            msg = Message.query.one()
+                 # attempt to add a msg
+            resp = c.post(f"/messages/{msg.id}/delete", follow_redirects=True)
+            html = resp.get_data(as_text=True)
+
+            # should go to home-anon.html view
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn('<h4>New to Warbler?</h4>', html)
